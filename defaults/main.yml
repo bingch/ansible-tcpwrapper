@@ -1,0 +1,9 @@
+---
+# defaults file for tcpwrapper
+spawn: '(/bin/echo %d from %c \<`/bin/date`\> >> /var/log/wrapper_allow.log) &'
+state: 'present'
+service: 'sshd'
+ip: '127.0.0.1'
+#
+hostsdeny: ''
+set_hostsdeny: false

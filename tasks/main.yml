@@ -1,0 +1,76 @@
+---
+- name: Install python-augeas on remote node
+  yum:
+    name: python-augeas
+    state: present
+
+- name: Check if the service is already existed 
+  augeas:
+    command: 'match'
+    path: "/files/etc/hosts.allow/*[process='{{service}}']"
+  register: srv
+
+- name: Setup service if not exists
+  augeas:
+    commands: "set /files/etc/hosts.allow/01/process '{{service}}'
+               set /files/etc/hosts.allow/01/client '{{ip}}'"
+  when: "state == 'present' and srv.result|length == 0"
+
+- name: Fetch service config 
+  augeas:
+    command: 'match'
+    path: "/files/etc/hosts.allow/*[process='{{service}}']/client"
+  register: srvcfg
+
+- name: Remove service if it's last ip is to be removed
+  augeas:
+    command: 'rm'
+    path: "/files/etc/hosts.allow/*[process='{{service}}']"
+  when: "state == 'absent' 
+        and srvcfg.result|length ==1 
+        and ip in srvcfg|json_query('result[*].value')"
+
+- name: Remove ip from service
+  augeas:
+    command: "rm"
+    path: "/files/etc/hosts.allow/*[process='{{service}}']/client[.='{{ip}}']"
+  when: "state =='absent' 
+        and srvcfg.result|length >=1 
+        and ip in srvcfg|json_query('result[*].value')"
+
+- name: Get service spawn status
+  augeas:
+    command: 'match'
+    path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
+  register: spwcfg
+  when: "state == 'present'"
+
+- name: Remove spawn before add ip to hosts.allow service
+  augeas:
+    command: "rm"
+    path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
+  when: "state == 'present' 
+        and spwcfg.result|length ==1
+        and ip not in srvcfg|json_query('result[*].value')"
+
+- name: Add ip to hosts.allow service
+  augeas:
+    command: "set"
+    path: "/files/etc/hosts.allow/*[process='{{service}}']/client[.='{{ip}}']"
+    value: "{{ip}}"
+  when: "state == 'present' and ip not in srvcfg|json_query('result[*].value')"
+
+- name: Add spawn for service
+  augeas:
+    command: "set"
+    path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
+    #value: "(/bin/echo %d from %c \\<`/bin/date`\\> >> /var/log/wrapper_allow.log) &"
+    value: "{{spawn}}"
+  when: "state == 'present' and spawn !='' and
+        (spwcfg.result|length ==0 or ip not in srvcfg|json_query('result[*].value'))"
+  
+- name: Setup hosts.deny
+  lineinfile:
+    path: /etc/hosts.deny
+    line: "{{hostsdeny}}"
+  when: set_hostsdeny == true and ip is defined and service == 'sshd'
