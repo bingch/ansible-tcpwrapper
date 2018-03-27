@@ -6,7 +6,7 @@ Manage tcp wrapper config like sshd/nrpe
 Requirements
 ------------
 
-Need ansible augeas library (https://github.com/bingch/ansible-augeas) and augeas/python-augeas installed on node machine 
+Need extra ansible augeas library (https://github.com/bingch/ansible-augeas) and augeas/python-augeas packages installed on destination machine 
 
 Role Variables
 --------------
@@ -24,7 +24,7 @@ A list of other roles hosted on Galaxy should go here, plus any details in regar
 Example Playbook
 ----------------
 ---
-- name: Allow jumbox to ssh to all machines
+- name: Allow jumpbox to ssh to all machines
   hosts: all 
   remote_user: root
   vars:

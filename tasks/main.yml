@@ -1,6 +1,6 @@
 ---
 - name: Install python-augeas on remote node
-  yum:
+  package:
     name: python-augeas
     state: present
 
@@ -9,6 +9,7 @@
     command: 'match'
     path: "/files/etc/hosts.allow/*[process='{{service}}']"
   register: srv
+  check_mode: false
 
 - name: Setup service if not exists
   augeas:
@@ -21,12 +22,13 @@
     command: 'match'
     path: "/files/etc/hosts.allow/*[process='{{service}}']/client"
   register: srvcfg
+  check_mode: false
 
 - name: Remove service if it's last ip is to be removed
   augeas:
     command: 'rm'
     path: "/files/etc/hosts.allow/*[process='{{service}}']"
-  when: "state == 'absent' 
+  when: "state == 'absent'
         and srvcfg.result|length ==1 
         and ip in srvcfg|json_query('result[*].value')"
 
@@ -34,7 +36,7 @@
   augeas:
     command: "rm"
     path: "/files/etc/hosts.allow/*[process='{{service}}']/client[.='{{ip}}']"
-  when: "state =='absent' 
+  when: "state =='absent'
         and srvcfg.result|length >=1 
         and ip in srvcfg|json_query('result[*].value')"
 
@@ -44,12 +46,13 @@
     path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
   register: spwcfg
   when: "state == 'present'"
+  check_mode: false
 
 - name: Remove spawn before add ip to hosts.allow service
   augeas:
     command: "rm"
     path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
-  when: "state == 'present' 
+  when: "state == 'present'
         and spwcfg.result|length ==1
         and ip not in srvcfg|json_query('result[*].value')"
 
@@ -64,7 +67,6 @@
   augeas:
     command: "set"
     path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
-    #value: "(/bin/echo %d from %c \\<`/bin/date`\\> >> /var/log/wrapper_allow.log) &"
     value: "{{spawn}}"
   when: "state == 'present' and spawn !='' and
         (spwcfg.result|length ==0 or ip not in srvcfg|json_query('result[*].value'))"
