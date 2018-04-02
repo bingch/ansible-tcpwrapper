@@ -1,5 +1,127 @@
 ---
-- hosts: localhost
+- hosts: 192.168.122.2
   remote_user: root
-  roles:
-    - tcpwrapper
+  gather_facts: false
+  vars:
+    set_hostsdeny: true
+    hostdeny: 'ALL:ALL'
+  tasks:
+    - name: clean up
+      replace:
+        path: /etc/hosts.deny
+        regexp: '^ALL.*'  
+
+    - replace:
+        path: /etc/hosts.allow
+        regexp: '^(sshd|nrpe).*'
+    - name: add sshd hosts
+      include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - "{{ ansible_control_host }}"
+          - bart-wrks
+        service: sshd
+        state: present
+
+    - name: check bart-wrks is there
+      raw: grep -w sshd /etc/hosts.allow | grep -w bart-wrks
+
+    - name: add more ssh hosts
+      include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - "{{ ansible_control_host }}"
+          - bart-wrks
+          - joe-wrks
+          - '192.168.2.'
+          - '192.168.3.'
+          - '192.168.4.'
+          - 'bar-wrks'
+          - 'mary-wrks'
+          - '192.168.5.'
+          - '127.0.0.1'
+        service: sshd
+        state: present
+
+    - name: remove bart from sshd
+      include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - bart-wrks
+        service: sshd
+        state: absent
+    - name: check bart-wrks absence
+      raw: if grep -w sshd /etc/hosts.allow | grep -q -w bart-wrks; then exit 1 ; else exit 0 ; fi 
+
+    - name: check mary-wrks is there
+      raw: grep -w sshd /etc/hosts.allow | grep -w mary-wrks
+
+    - name: add nrpe host
+      include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - "{{ ansible_control_host }}"
+          - bart-wrks
+          - joe-wrks
+          - '192.168.2.'
+          - '127.0.0.1'
+        service: nrpe
+        state: present
+
+    - name: check bart-wrks is in nrpe
+      raw: grep -w nrpe /etc/hosts.allow | grep -w bart-wrks
+
+    - name: remove nrpe host
+      include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - bart-wrks
+          - joe-wrks
+        service: nrpe
+        state: absent
+
+    - name: check joe-wrks absence in nrpe
+      raw: if grep -w nrpe /etc/hosts.allow | grep -q -w joe-wrks; then exit 1 ; else exit 0 ; fi
+
+    # clean up
+    - include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - "{{ ansible_control_host }}"
+          - bart-wrks
+          - joe-wrks
+          - '192.168.2.'
+          - '192.168.3.'
+          - '192.168.4.'
+          - 'bar-wrks'
+          - 'mary-wrks'
+          - '192.168.5.'
+          - '127.0.0.1'
+
+        state: absent
+        service: sshd
+    - include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - "{{ ansible_control_host }}"
+          - bart-wrks
+          - joe-wrks
+          - '192.168.2.'
+          - '192.168.3.'
+          - '192.168.4.'
+          - 'bar-wrks'
+          - 'mary-wrks'
+          - '192.168.5.'
+          - '127.0.0.1'
+        state: absent
+        service: nrpe
+    - augeas:
+        command: "rm"
+        path: "/files/etc/hosts.deny/1"

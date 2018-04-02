@@ -3,7 +3,8 @@
 spawn: '(/bin/echo %d from %c \<`/bin/date`\> >> /var/log/wrapper_allow.log) &'
 state: 'present'
 service: 'sshd'
-ip: '127.0.0.1'
-#
-hostsdeny: ''
-set_hostsdeny: false
+host_list: []                         # host to be added to service
+ansible_control_host: '192.168.122.1' # set to your actual ip
+hostsdeny: 'ALL:ALL'                   
+set_hostsdeny: false                  # be careful to make sure control machine is in
+                                      # sshd allow list before set to true

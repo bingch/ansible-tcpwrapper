@@ -1,0 +1,63 @@
+---
+- name: Check if the service is already existed 
+  augeas:
+    command: 'match'
+    path: "/files/etc/hosts.allow/*[process='{{tmp_service}}']"
+  register: srv
+  check_mode: false
+
+- name: Remove host in existing service conf
+  block:
+    - name: Fetch service config
+      augeas:
+        command: 'match'
+        path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/client"
+      register: srvcfg
+      check_mode: false
+    - name: Set existing host list
+      set_fact:
+        tmp_cur_list: "{{ srvcfg.result | map(attribute='value') | list }}"
+    - name: Get client list need to remove
+      set_fact:
+        tmp_rm_list: "{{ tmp_host_list | intersect(tmp_cur_list) }}"
+
+    - name: Do removal
+      block:
+        - name: Get service spawn status
+          augeas:
+            command: 'match'
+            path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/spawn"
+          register: spwcfg
+          check_mode: false
+        - name: Remove spawn before remove host to hosts.allow service
+          augeas:
+            command: "rm"
+            path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/spawn"
+          when: spwcfg.result | length == 1
+        - name: Remove host from hosts.allow service
+          augeas:
+            command: "rm"
+            path: "{{srv.result[0].label}}/client[.='{{ item }}']"
+          with_items: "{{ tmp_rm_list }}"
+        - name: Add spawn for service
+          augeas:
+            command: "set"
+            path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/spawn"
+            value: "{{ spawn }}"
+          when: spawn !=''
+      when: tmp_rm_list | length > 0 and tmp_rm_list | length <  tmp_cur_list | length
+
+    - name: Remove service
+      block:
+        - name: Make sure sshd is allow
+          replace:
+            path:  "/etc/hosts.deny"
+            regexp: '^ALL\:'
+            replace: "ALL EXCEPT sshd:"
+          when: tmp_service == 'sshd'
+        - name: Remove service
+          augeas:
+            command: 'rm'
+            path: "/files/etc/hosts.allow/*[process='{{tmp_service}}']" 
+      when: tmp_rm_list | length == tmp_cur_list | length          
+  when: srv.result | length > 0

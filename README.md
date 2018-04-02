@@ -11,11 +11,17 @@ Need extra ansible augeas library (https://github.com/bingch/ansible-augeas) and
 Role Variables
 --------------
 
-service: sshd/nrpe etc.
-state: default 'present'
-ip: ip address needs to be add in allow ip list.
-spawn: string that need to added at the end of service, default '/bin/echo %d from %c \<`/bin/date`\> >> /var/log/wrapper_allow.log ) &' for sshd service
-
+<pre>
+# defaults file for tcpwrapper
+spawn: '(/bin/echo %d from %c \<`/bin/date`\> >> /var/log/wrapper_allow.log) &'
+state: 'present'
+service: 'sshd'
+host_list: []                         # host to be added to or del from service
+ansible_control_host: '192.168.122.1' # set to your actual ip
+hostsdeny: 'ALL:ALL'                   
+set_hostsdeny: false                  # be careful to make sure control machine is in
+                                      # sshd allow list before set to true
+</pre>
 Dependencies
 ------------
 
@@ -24,23 +30,38 @@ A list of other roles hosted on Galaxy should go here, plus any details in regar
 Example Playbook
 ----------------
 ---
-- name: Allow jumpbox to ssh to all machines
-  hosts: all 
+- hosts: 192.168.122.2
   remote_user: root
-  vars:
-    jumpboxes:
-      - ip: '1.2.3.4'
-        host: jumpbox
-      - ip: '1.2.3.5'
-        host: jumpbox2
-
   tasks:
-    - name: Add jumpboxes to hosts.allow
-      include_role: name=tcpwrapper
+    - name: add sshd hosts
+      include_role:
+        name: tcpwrapper
       vars:
-        ip: "{{item.ip}}"
+        host_list:
+          - "{{ ansible_control_host }}"
+          - bart-wrks
         service: sshd
-      with_items: "{{jumpboxes}}"
+        state: present
+
+    - name: add nrpe host
+      include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - "{{ ansible_control_host }}"
+          - bart-wrks
+          - joe-wrks
+        service: nrpe
+        state: present
+
+    - name: remove bart from sshd
+      include_role:
+        name: tcpwrapper
+      vars:
+        host_list:
+          - bart-wrks
+        service: sshd
+        state: absent
 
 License
 -------

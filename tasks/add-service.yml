@@ -1,0 +1,77 @@
+---
+
+- name: Check if the service is already existed 
+  augeas:
+    command: 'match'
+    path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']"
+  register: srv
+  check_mode: false
+
+- name: Add host in existing service conf
+  block:
+    - name: Fetch service config 
+      augeas:
+        command: 'match'
+        path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/client"
+      register: srvcfg
+      check_mode: false
+    - name: Set existing host list
+      set_fact:
+        tmp_cur_list: "{{ srvcfg.result | map(attribute='value') | list }}"
+    - name: Get new client list need to add
+      set_fact:
+        tmp_new_list: "{{ tmp_host_list | difference(tmp_cur_list) }}"
+    - name: Get service spawn status
+      block:
+        - name: Get service spawn status
+          augeas:
+            command: 'match'
+            path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/spawn"
+          register: spwcfg
+          check_mode: false
+        - name: Remove spawn before add host to hosts.allow service
+          augeas:
+            command: "rm"
+            path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/spawn"
+          when: spwcfg.result|length ==1
+        - name: Add new host to hosts.allow service
+          augeas:
+            commands: "{% for var in tmp_new_list %}
+                       set '{{srv.result[0].label}}'/client[last()+1] '{{ var }}'
+                       {% endfor %}"
+        - name: Add spawn for service
+          augeas:
+            command: "set"
+            path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/spawn"
+            value: "{{ spawn }}"
+          when: spawn !=''
+      when: tmp_new_list | length > 0
+  when: srv.result | length > 0
+
+- name: Setup service if not exists
+  block:
+    - name: add service 
+      augeas:
+        commands: "set /files/etc/hosts.allow/01/process '{{ tmp_service}}'
+                   {% for var in  tmp_host_list %}
+                   set /files/etc/hosts.allow/01/client[last()+1] '{{ var }}'
+                   {% endfor %}"
+    - name: Add spawn for service
+      augeas:
+        command: "set"
+        path: "/files/etc/hosts.allow/*[process='{{ tmp_service }}']/spawn"
+        value: "{{ spawn }}"
+      when: spawn !=''
+    - name: Setup hosts.deny
+      lineinfile:
+        path: /etc/hosts.deny
+        line: "{{ hostsdeny }}"
+      when: "set_hostsdeny and tmp_service == 'sshd' 
+             and ansible_control_host in tmp_host_list"
+    - fail:
+        msg: "You ask set /etc/hosts.deny without putting 
+            '{{ ansible_control_host }}' in host list!,
+             doing so will to lock yourself out!"
+      when: "set_hostsdeny and tmp_service == 'sshd' 
+            and ansible_control_host not in tmp_host_list"
+  when: srv.result|length == 0

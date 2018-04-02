@@ -4,75 +4,16 @@
     name: python-augeas
     state: present
 
-- name: Check if the service is already existed 
-  augeas:
-    command: 'match'
-    path: "/files/etc/hosts.allow/*[process='{{service}}']"
-  register: srv
-  check_mode: false
+- name: set facts
+  set_fact:
+    tmp_service: "{{ service }}"
+    tmp_state: "{{ state }}"
+    tmp_host_list: "{{ host_list }}"
 
-- name: Setup service if not exists
-  augeas:
-    commands: "set /files/etc/hosts.allow/01/process '{{service}}'
-               set /files/etc/hosts.allow/01/client '{{ip}}'"
-  when: "state == 'present' and srv.result|length == 0"
+- name: add service conf
+  include_tasks: add-service.yml
+  when: tmp_state == "present"
 
-- name: Fetch service config 
-  augeas:
-    command: 'match'
-    path: "/files/etc/hosts.allow/*[process='{{service}}']/client"
-  register: srvcfg
-  check_mode: false
-
-- name: Remove service if it's last ip is to be removed
-  augeas:
-    command: 'rm'
-    path: "/files/etc/hosts.allow/*[process='{{service}}']"
-  when: "state == 'absent'
-        and srvcfg.result|length ==1 
-        and ip in srvcfg|json_query('result[*].value')"
-
-- name: Remove ip from service
-  augeas:
-    command: "rm"
-    path: "/files/etc/hosts.allow/*[process='{{service}}']/client[.='{{ip}}']"
-  when: "state =='absent'
-        and srvcfg.result|length >=1 
-        and ip in srvcfg|json_query('result[*].value')"
-
-- name: Get service spawn status
-  augeas:
-    command: 'match'
-    path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
-  register: spwcfg
-  when: "state == 'present'"
-  check_mode: false
-
-- name: Remove spawn before add ip to hosts.allow service
-  augeas:
-    command: "rm"
-    path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
-  when: "state == 'present'
-        and spwcfg.result|length ==1
-        and ip not in srvcfg|json_query('result[*].value')"
-
-- name: Add ip to hosts.allow service
-  augeas:
-    command: "set"
-    path: "/files/etc/hosts.allow/*[process='{{service}}']/client[.='{{ip}}']"
-    value: "{{ip}}"
-  when: "state == 'present' and ip not in srvcfg|json_query('result[*].value')"
-
-- name: Add spawn for service
-  augeas:
-    command: "set"
-    path: "/files/etc/hosts.allow/*[process='{{service}}']/spawn"
-    value: "{{spawn}}"
-  when: "state == 'present' and spawn !='' and
-        (spwcfg.result|length ==0 or ip not in srvcfg|json_query('result[*].value'))"
-  
-- name: Setup hosts.deny
-  lineinfile:
-    path: /etc/hosts.deny
-    line: "{{hostsdeny}}"
-  when: set_hostsdeny == true and ip is defined and service == 'sshd'
+- name: add service conf
+  include_tasks: remove-service.yml
+  when: tmp_state == "absent"
